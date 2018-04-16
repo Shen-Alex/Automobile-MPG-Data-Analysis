@@ -1,0 +1,353 @@
+---
+title: "Auto MPG Data Analysis"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load libraries
+
+```{r}
+library(knitr)
+library(dplyr)
+library(corrplot)
+library(visreg)
+library(ggplot2)
+#library(scatterplot3d)
+```
+## GitHub Documents
+
+This is an R Markdown format used for publishing markdown documents to GitHub. When you click the **Knit** button all R code chunks are run and a markdown file (.md) suitable for publishing to GitHub is generated.
+
+
+## Data Description
+
+1. Title: Auto-Mpg Data
+
+2. Sources:
+   (a) Origin:  This dataset was taken from the StatLib library which is
+                maintained at Carnegie Mellon University. The dataset was 
+                used in the 1983 American Statistical Association Exposition.
+   (c) Date: July 7, 1993
+
+3. Past Usage:
+    -  See 2b (above)
+    -  Quinlan,R. (1993). Combining Instance-Based and Model-Based Learning.
+       In Proceedings on the Tenth International Conference of Machine 
+       Learning, 236-243, University of Massachusetts, Amherst. Morgan
+       Kaufmann.
+
+4. Relevant Information:
+
+   This dataset is a slightly modified version of the dataset provided in
+   the StatLib library.  In line with the use by Ross Quinlan (1993) in
+   predicting the attribute "mpg", 8 of the original instances were removed 
+   because they had unknown values for the "mpg" attribute.  The original 
+   dataset is available in the file "auto-mpg.data-original".
+
+   "The data concerns city-cycle fuel consumption in miles per gallon,
+    to be predicted in terms of 3 multivalued discrete and 5 continuous
+    attributes." (Quinlan, 1993)
+
+5. Number of Instances: 398
+
+6. Number of Attributes: 9 including the class attribute
+
+7. Attribute Information:
+
+    1. mpg:           continuous
+    2. cylinders:     multi-valued discrete
+    3. displacement:  continuous
+    4. horsepower:    continuous
+    5. weight:        continuous
+    6. acceleration:  continuous
+    7. model year:    multi-valued discrete
+    8. origin:        multi-valued discrete
+    9. car name:      string (unique for each instance)
+
+8. Missing Attribute Values:  horsepower has 6 missing values
+
+## Including Code
+
+You can include R code in the document as follows:
+
+```{r}
+data <- read.table("http://mlr.cs.umass.edu/ml/machine-learning-databases/auto-mpg/auto-mpg.data",header = T, col.names = c("mpg","cylinders","displacement","horsepower","weight","acceleration","model_year", "origin","car_name"))
+```
+
+### Descriptive Analysis
+
+```{r}
+str(data)
+
+#View(data)
+```
+
+```{r}
+glimpse(data)
+```
+
+```{r}
+head(data)
+```
+
+```{r}
+summary(data)
+```
+
+```{r}
+#factor(data$model_year)['levels']
+print("Unique model years")
+unique(data$model_year)
+
+print("Unique origin")
+unique(data$origin)
+
+print("Unique cylinders")
+unique(data$cylinders)
+```
+
+### Checking missing values
+```{r}
+anyNA(data)
+is.na(data$horsepower)
+```
+
+## Data Cleaning
+
+* Cylinders column should be factors (multi-valued discrete) not integer
+```{r}
+#factor(data,labels=c("I","II","III")) -- dplyr %>% method passing data$cylinder as argument to fator fn
+data$cylinders = data$cylinders %>%
+                 factor(labels = sort(unique(data$cylinders)))
+```
+
+* Horsepower is factor and it should be continuous numeric variable
+```{r}
+data$horsepower = as.numeric(levels(data$horsepower))[data$horsepower]
+```
+* Horsepower has some missing values. We will impute those by mean.
+
+```{r}
+#library(zoo)
+#na.aggregate(DF)
+#na_count <-sapply(x, function(y) sum(length(which(is.na(y)))))
+#na_count <- data.frame(na_count)
+#sum(is.na(data$horsepower))
+
+colSums(is.na(data))
+
+data$horsepower[is.na(data$horsepower)] = mean(data$horsepower,na.rm = T)
+```
+
+* Cylinders 3 & 5 has very low values. We can drop these cylinders
+
+```{r}
+#data %>% group_by(cylinders) %>% summarise(length(cylinders))
+
+data %>% group_by(cylinders) %>% count(cylinders)
+
+data <- data %>% filter(cylinders != 3 & cylinders != 5)
+
+#p %>% group_by(cylinders) %>% summarise(length(cylinders))
+```
+
+* Converting Model Year to factor since it has few levels
+```{r}
+
+data$model_year = data$model_year %>%
+                  factor(labels = sort(unique(data$model_year)))
+```
+
+
+* Converting Origin to factor since it has only 3 levels
+```{r}
+
+data$origin = data$origin %>%
+                  factor(labels = sort(unique(data$origin)))
+```
+
+## Visual Analysis
+
+[Learn ggplot](http://www.sthda.com/english/wiki/ggplot2-essentials)
+
+* Accelration data is normaly distributed. Rest are right skewed.
+```{r}
+library(reshape2)
+
+ggplot(data,aes(mpg, fill=cylinders)) +
+  geom_histogram(color="black")
+
+ggplot(data, aes(x=acceleration)) + 
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+ geom_density(alpha=.2, fill="#FF6666") 
+
+ggplot(data, aes(x=horsepower)) + 
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+ geom_density(alpha=.2, fill="#FF6666") 
+
+ggplot(data, aes(x=displacement)) + 
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+ geom_density(alpha=.2, fill="#FF6666") 
+
+ggplot(data, aes(x=weight)) + 
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+ geom_density(alpha=.2, fill="#FF6666") 
+
+d <- melt(data[,-c(8:9)])
+
+ggplot(d,aes(value)) + 
+    facet_wrap(~variable,scales = "free_x",nrow = 3) + 
+    geom_histogram(colour="black", fill="red")
+
+#ggplot(data,aes(mpg, fill = model_year)) + geom_histogram(stat = "bin")
+#hist(data$mpg)
+```
+
+
+### Checking for outliers
+
+[What is a Boxplot?](http://www.clayford.net/statistics/a-note-on-boxplots-in-r/)
+
+
+```{r}
+ggplot(data, aes(model_year,mpg,color=cylinders)) +
+  geom_boxplot()
+```
+
+
+```{r}
+ggplot(data, aes(origin,mpg)) +
+  geom_boxplot()
+```
+
+* Origin 1 has heavy weighted cars (median ~ 3400)
+```{r}
+ggplot(data, aes(origin,weight)) +
+  geom_boxplot()
+```
+
+```{r}
+ggplot(data, aes(cylinders,weight,fill=cylinders)) +
+  geom_boxplot()
+```
+
+
+```{r}
+ggplot(data, aes(x=factor(cylinders),y=mpg,color=factor(cylinders)))+
+  geom_boxplot(outlier.color = "red")
+
+d <- melt(data[,-c(8:9)])
+
+ggplot(d,aes('',value)) + 
+    facet_wrap(~variable,scales = "free_x") + 
+    geom_boxplot(outlier.colour="red", outlier.shape=16, outlier.size=2, notch=F)
+```
+
+### Scatterplot
+
+* Miles per gallon (mpg) decreasing with increase of the weight
+
+```{r}
+ggplot(data,aes(weight,mpg)) +
+  geom_point()+
+  geom_smooth(method=lm)  
+
+ggplot(data,aes(cylinders,mpg)) +
+  geom_point()+
+  geom_smooth(method=lm)  
+
+ggplot(data,aes(displacement,mpg)) +
+  geom_point()+
+  geom_smooth(method=lm)  
+
+ggplot(data,aes(weight, displacement)) +
+  geom_point(color="red") +
+  geom_smooth(method = lm)
+```
+
+* Weight, Horsepower and Displacement are highly correlated, so we can pick one attribute out of 3
+
+```{r}
+newdata <- cor(data[ , c('mpg','weight', 'displacement', 'horsepower', 'acceleration')], use='complete')
+corrplot(newdata, method = "number")
+
+```
+
+* 6 and 8 cylinders cars are majorly built in origin 1.
+
+```{r}
+ggplot(data, aes(cylinders,fill=origin)) +
+  geom_bar(position = "dodge")
+
+ggplot(data, aes(cylinders,fill=origin)) +
+  geom_bar(position = "stack")
+```
+
+* Significant drop in the car weights in origin 1. The reason behind it is increase in production of 4 cylinders cars those weighs less.
+
+```{r}
+ggplot(data, aes(model_year, y = weight, color=origin)) +
+  geom_boxplot() +
+  facet_wrap(~ origin) +
+  xlab('Model Year') +
+  ylab('Weight') +
+  ggtitle('Car Weights Distributions Over Time by Region of Origin')
+```
+
+* We can see that over the year there was increase in the milege of the cars (Miles Per Gallon)
+
+```{r}
+ ggplot(data, aes(model_year,mpg,group=1))+geom_smooth()
+```
+
+* Significant drop in Car Engine's horsepower over the years
+```{r}
+ ggplot(data, aes(model_year,horsepower,group=1))+geom_smooth()
+```
+
+### Building Linear Model - Weight is more significant among other features and it was highly correlated to Target variable MPG
+
+* Spliting the dataset in Train and Test (80-20)
+```{r}
+set.seed(100)
+
+#80%-20% split
+
+indexes <- sample(nrow(data), (0.80*nrow(data)), replace = FALSE)
+
+trainData <- data[indexes, ]
+testData <- data[-indexes, ]
+```
+
+* Creating the Linear Model with significant features
+
+```{r}
+model <- lm(mpg~weight+horsepower+origin+model_year+displacement+acceleration,data = data)
+
+```
+
+* Stats for the linear model
+```{r}
+summary(model)
+```
+
+* Plots for the linear model
+
+[Plots diagnostic](http://data.library.virginia.edu/diagnostic-plots/)
+
+```{r}
+plot(model)
+```
+
+```{r}
+visreg(model)
+```
+
+```{r}
+predictions <- predict(model, newdata = testData)
+
+sqrt(mean((predictions - testData$mpg)^2))
+```
